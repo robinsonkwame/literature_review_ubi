@@ -21,4 +21,11 @@ class ExtractTransformEconSecurityProject(object):
                              {"Misc Videos":133}]
 
     def transform(self):
+        self.df[['Source', 'Author', 'Title', 'Misc']] =\
+            self.df["raw_content"].str.split("//", expand=True)
+
+        self.df["Date"] = None #... str.rextract on Source, Author
+        # set major_topics
+        # swap Books Authors and Title's (I think they're opposite everything else)
+
         pass
