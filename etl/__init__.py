@@ -57,3 +57,7 @@ class ExtractTransformEconSecurityProject(object):
                   129,130]
         self.df["Title"].iloc[fix_up] = self.df["Author"].iloc[fix_up]
         self.df["Author"].iloc[fix_up] = None
+
+        # ... a stragler
+        self.df["Date"].iloc[32] = "Jan, 2005"
+        self.df["Title"].iloc[32] = "A Failure to Communicate: What (If Anything) Can we Learn from the Negative Income Tax Experiments?"
