@@ -11,14 +11,14 @@ class ExtractTransformEconSecurityProject(object):
         self.df = pd.read_json(self.data_file_path)
         self.topic_list = major_topic_list or\
                 [{"topic":"Books","upper":7},
-                {"topic":"Overview of UBI","upper":20},
-                {"topic":"Past Programs, Pilots and Findings","upper":37},
-                {"topic":"Current & Pending Pilots and Programs","upper":59},
-                {"topic":"Policy Variants and Alternatives","upper":76},
-                {"topic":"Political & Policy Change Strategies","upper":91},
-                {"topic":"Arguments for UBI","upper":113},
-                {"topic":"Critiques and Concerns","upper":128},
-                {"topic":"Misc Videos","upper":133}]
+                 {"topic":"Overview of UBI","upper":20},
+                 {"topic":"Past Programs, Pilots and Findings","upper":37},
+                 {"topic":"Current & Pending Pilots and Programs","upper":59},
+                 {"topic":"Policy Variants and Alternatives","upper":76},
+                 {"topic":"Political & Policy Change Strategies","upper":91},
+                 {"topic":"Arguments for UBI","upper":113},
+                 {"topic":"Critiques and Concerns","upper":128},
+                 {"topic":"Misc Videos","upper":133}]
 
     def transform(self):
         self.df[['Source', 'Author', 'Title', 'Misc']] =\
@@ -43,6 +43,17 @@ class ExtractTransformEconSecurityProject(object):
             upper = item["upper"]
             self.df["Major Topic"].iloc[lower:upper] = topic
             lower = upper
-        # swap Books Authors and Title's (I think they're opposite everything else)
 
-        pass
+        # remove dates from non date columns
+        self.df['Author'] =\
+                self.df['Author'].str.replace(regex, "")
+        self.df['Title'] =\
+                self.df['Title'].str.replace(regex, "")
+
+        # One off fix ups/swaps of author and titles
+        fix_up = [7,8,15,20,
+                  23,25,27,
+                  57,60,90,
+                  129,130]
+        self.df["Title"].iloc[fix_up] = self.df["Author"].iloc[fix_up]
+        self.df["Author"].iloc[fix_up] = None
