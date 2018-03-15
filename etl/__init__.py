@@ -10,22 +10,39 @@ class ExtractTransformEconSecurityProject(object):
 
         self.df = pd.read_json(self.data_file_path)
         self.topic_list = major_topic_list or\
-                            [{"Books":7},
-                             {"Overview of UBI":20},
-                             {"Past Programs, Pilots and Findings":37},
-                             {"Current & Pending Pilots and Programs":59},
-                             {"Policy Variants and Alternatives":76},
-                             {"Political & Policy Change Strategies":91},
-                             {"Arguments for UBI":113},
-                             {"Critiques and Concerns":128},
-                             {"Misc Videos":133}]
+                [{"topic":"Books","upper":7},
+                {"topic":"Overview of UBI","upper":20},
+                {"topic":"Past Programs, Pilots and Findings","upper":37},
+                {"topic":"Current & Pending Pilots and Programs","upper":59},
+                {"topic":"Policy Variants and Alternatives","upper":76},
+                {"topic":"Political & Policy Change Strategies","upper":91},
+                {"topic":"Arguments for UBI","upper":113},
+                {"topic":"Critiques and Concerns","upper":128},
+                {"topic":"Misc Videos","upper":133}]
 
     def transform(self):
         self.df[['Source', 'Author', 'Title', 'Misc']] =\
             self.df["raw_content"].str.split("//", expand=True)
 
-        self.df["Date"] = None #... str.rextract on Source, Author
-        # set major_topics
+        # Set dates
+        regex = '\((.+)\)'
+        author_dates = self.df['Author']\
+                           .str\
+                           .extract(regex, expand=False)
+        title_dates = self.df['Title']\
+                           .str\
+                           .extract(regex, expand=False)
+        self.df["Date"] = author_dates.combine_first(title_dates)
+
+        # Set major_topics
+        self.df["Major Topic"] = None
+
+        lower = 0
+        for item in self.topic_list:
+            topic = item["topic"]
+            upper = item["upper"]
+            self.df["Major Topic"].iloc[lower:upper] = topic
+            lower = upper
         # swap Books Authors and Title's (I think they're opposite everything else)
 
         pass
