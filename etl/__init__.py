@@ -20,6 +20,10 @@ class ExtractTransformEconSecurityProject(object):
                  {"topic":"Critiques and Concerns","upper":128},
                  {"topic":"Misc Videos","upper":133}]
 
+    def _swap(self, to_col, from_col, fix_up):
+        self.df[to_col].iloc[fix_up] = self.df[from_col].iloc[fix_up]
+        self.df[from_col].iloc[fix_up] = None
+
     def transform(self):
         self.df[['Source', 'Author', 'Title', 'Misc']] =\
             self.df["raw_content"].str.split("//", expand=True)
@@ -54,10 +58,16 @@ class ExtractTransformEconSecurityProject(object):
         fix_up = [7,8,15,20,
                   23,25,27,
                   57,60,90,
-                  129,130]
-        self.df["Title"].iloc[fix_up] = self.df["Author"].iloc[fix_up]
-        self.df["Author"].iloc[fix_up] = None
+                  129,130,66]
+        self._swap("Title", "Author", fix_up)
 
-        # ... a stragler
+        # One off fix ups/swaps of source and titles
+        fix_up = [0,1,2,
+                  3,4,5,
+                  6,31,81,
+                  95]
+        self._swap("Title", "Source", fix_up)
+
+        # ... a straggler
         self.df["Date"].iloc[32] = "Jan, 2005"
         self.df["Title"].iloc[32] = "A Failure to Communicate: What (If Anything) Can we Learn from the Negative Income Tax Experiments?"
