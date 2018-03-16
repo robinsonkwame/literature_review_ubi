@@ -6,6 +6,7 @@ from bs4 import BeautifulSoup
 import time
 import io
 import requests
+from selenium import webdriver
 import pandas as pd
 from lxml.html.clean import Cleaner
 import re
@@ -44,6 +45,27 @@ class ExtractTransformEconSecurityProject(object):
     def _swap(self, to_col, from_col, fix_up):
         self.df[to_col].iloc[fix_up] = self.df[from_col].iloc[fix_up]
         self.df[from_col].iloc[fix_up] = None
+
+    def _selenium_get(self, url=None, username=None, password=None):
+        """
+        Using selenium typically requires a login to the company hosting the url,
+        e.g., WSJ requires a login to read their content. I don't have a WSJ login
+        so this function is left untested and isn't used in the main extract loop.
+
+        See: https://github.com/andrewzc/python-wsj/blob/master/article-parse/v1.2.0/article_parser.py
+        """
+        ret = None
+        browser = webdriver.Firefox()
+        browser.get(url)
+        login = browser.find_element_by_link_text("Log In").click()
+        loginID = browser.find_element_by_id("username").send_keys(username)   # Input username
+        loginPass = browser.find_element_by_id("password").send_keys(password) # Input password
+        loginReady = browser.find_element_by_class_name("login_submit")
+        loginReady.submit()
+        html = browser.page_source
+        browser.close()
+        ret = self._visible_text(BeautifulSoup(html, 'html.parser'))
+        return ret
 
     def _html_to_text(self, url=None, html=None):
         ret = None
@@ -108,7 +130,9 @@ class ExtractTransformEconSecurityProject(object):
 
     def download_text(self, type="html",
                       exclude_major_topic=[],
-                      exclude_hosts=["amazon"]):
+                      exclude_hosts=[],
+                      selenium_hosts=["wsj.com"],
+                      use_selenium=False):
         assert 'url' in self.df, "DataFrame does not have a `url` column to d/l data from! Bad .json read?"
         assert 'Text' in self.df, "DataFrame does not have a `Text` column to push text data to! Run .transform()"
         assert 'Type' in self.df, "DataFrame does not have a `Type` column! Run .transform()"
@@ -120,20 +144,35 @@ class ExtractTransformEconSecurityProject(object):
         total = sum(self.df.Type == type)
         count = 0
         logger.info("About to start extract Text from {} urls".format(type))
-        for idx in self.df.index:
-            if self.df.Type[idx] == type and\
+        for idx in self.df.index[39:]:
+            if self.df.url[idx] and\
+               self.df.Type[idx] == type and\
                not self.df.MajorTopic[idx] in exclude_major_topic and\
                not any((host in self.df.url[idx] for host in exclude_hosts)):
                 url = self.df.url[idx]
                 count += 1
                 logger.info("({}/{}) Extracting {} ... ".format(count, total, url))
-                text = extract(url)
+                if any((host in url for host in selenium_hosts)):
+                    logger.info("\t ... using Selenium ... you will see a Firefox browser flash on-screen for a few moments ...")
+                    text = "Unable to Extract with Selenium"
+                    if use_selenium:
+                        text = self._selenium_get(url)
+                else:
+                    text = extract(url)
                 self.df.Text[idx] = text
                 logger.info("({}/{}) Extracted: \"{}\"".format(count, total, text[:50] if text else "TIMED OUT"))
 
                 time.sleep(1) # be a good netizen when scraping content
 
     def transform(self):
+        # For content w no url (only occurs once I thnk), we replace 'None'
+        # with the empty string so that additional str transformations can proceed easily
+        # and the empty string is skipped in a url existence check downstream
+        #
+        # Doing this replace directly since .replace() gets squirelly if
+        # value is actually None, want to replace with None, even though
+        # None is the default value
+        self.df.url[self.df.url == 'None'] = ''
         self.df[['Source', 'Author', 'Title', 'Misc']] =\
             self.df["raw_content"].str.split("//", expand=True)
 
