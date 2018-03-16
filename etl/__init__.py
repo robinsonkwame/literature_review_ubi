@@ -46,10 +46,14 @@ class ExtractTransformEconSecurityProject(object):
         self.df[from_col].iloc[fix_up] = None
 
     def _html_to_text(self, url=None, html=None):
+        ret = None
         if url and not html:
-            response = requests.get(url, headers=self.headers)
-
-        ret = self._visible_text(BeautifulSoup(response.content, 'html.parser'))
+            try:
+                response = requests.get(url, headers=self.headers, timeout=60)
+            except requests.exceptions.Timeout:
+                pass
+            else:
+                ret = self._visible_text(BeautifulSoup(response.content, 'html.parser'))
         return ret
 
     def _visible_text(self, soup):
@@ -78,7 +82,7 @@ class ExtractTransformEconSecurityProject(object):
         """
         ret = None
         if url and not pdf:
-            response = requests.get(url, headers=self.headers, verify=False)
+            response = requests.get(url, headers=self.headers, verify=False, timeout=360)
             pdf = response.content
 
         manager = PDFResourceManager()
@@ -125,13 +129,9 @@ class ExtractTransformEconSecurityProject(object):
                 logger.info("({}/{}) Extracting {} ... ".format(count, total, url))
                 text = extract(url)
                 self.df.Text[idx] = text
-                logger.info("({}/{}) Extracted: \"{}\"".format(count, total, text[:50]))
+                logger.info("({}/{}) Extracted: \"{}\"".format(count, total, text[:50] if text else "TIMED OUT"))
 
                 time.sleep(1) # be a good netizen when scraping content
-
-            if count > 10:
-                break
-                logging.info("... debug jumping out ...")
 
     def transform(self):
         self.df[['Source', 'Author', 'Title', 'Misc']] =\
@@ -177,7 +177,7 @@ class ExtractTransformEconSecurityProject(object):
                   95]
         self._swap("Title", "Source", fix_up)
 
-       # ... a straggler
+        # ... a straggler
         self.df["Date"].iloc[32] = "Jan, 2005"
         self.df["Title"].iloc[32] = "A Failure to Communicate: What (If Anything) Can we Learn from the Negative Income Tax Experiments?"
 
