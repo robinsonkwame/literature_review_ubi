@@ -145,22 +145,21 @@ class ExtractTransformEconSecurityProject(object):
         count = 0
         logger.info("About to start extract Text from {} urls".format(type))
         for idx in self.df.index[39:]:
-            if self.df.url[idx] and\
-               self.df.Type[idx] == type and\
-               not self.df.MajorTopic[idx] in exclude_major_topic and\
-               not any((host in self.df.url[idx] for host in exclude_hosts)):
+            if self.df.url[idx] and self.df.Type[idx] == type\
+               and not self.df.MajorTopic[idx] in exclude_major_topic\
+               and not any((host in self.df.url[idx] for host in exclude_hosts)):
                 url = self.df.url[idx]
                 count += 1
                 logger.info("({}/{}) Extracting {} ... ".format(count, total, url))
                 if any((host in url for host in selenium_hosts)):
                     logger.info("\t ... using Selenium ... you will see a Firefox browser flash on-screen for a few moments ...")
-                    text = "Unable to Extract with Selenium"
+                    text = ""
                     if use_selenium:
                         text = self._selenium_get(url)
                 else:
                     text = extract(url)
                 self.df.Text[idx] = text
-                logger.info("({}/{}) Extracted: \"{}\"".format(count, total, text[:50] if text else "TIMED OUT"))
+                logger.info("({}/{}) Extracted: \"{}\"".format(count, total, text[:50] if text else "Did Not Fetch Text!"))
 
                 time.sleep(1) # be a good netizen when scraping content
 
