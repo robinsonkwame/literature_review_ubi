@@ -1,4 +1,12 @@
+from pdfminer.pdfinterp import PDFResourceManager, PDFPageInterpreter
+from pdfminer.converter import HTMLConverter,TextConverter,XMLConverter
+from pdfminer.layout import LAParams
+from pdfminer.pdfpage import PDFPage
+import io
+import requests
 import pandas as pd
+from lxml.html.clean import Cleaner
+import re
 import os
 
 class ExtractTransformEconSecurityProject(object):
@@ -20,9 +28,57 @@ class ExtractTransformEconSecurityProject(object):
                  {"topic":"Critiques and Concerns","upper":128},
                  {"topic":"Misc Videos","upper":133}]
 
+        self.cleaner = Cleaner()
+        self.cleaner.javascript = False
+
     def _swap(self, to_col, from_col, fix_up):
         self.df[to_col].iloc[fix_up] = self.df[from_col].iloc[fix_up]
         self.df[from_col].iloc[fix_up] = None
+
+    def _html_to_text(self, url=None, html=None):
+        if url and not html:
+            text = requests.get(url).text
+
+        ret = " ".join(\
+                re.sub(r'<[^>]*?>', '',\
+                    self.cleaner.clean_html(text))\
+                .strip()\
+                .replace("\n","")
+                .split()
+                )
+        return ret
+
+    def _pdf_to_text(self, url=None, pdf=None):
+        """
+        Convert pdf to text w/o writing to disk
+
+        Adopted from https://stackoverflow.com/a/48825461/3662899 `illusionx`
+        """
+        ret = None
+        if url and not pdf:
+            response = requests.get(url, verify=False)
+            pdf = response.content
+
+        manager = PDFResourceManager()
+        output = io.StringIO()
+        codec = 'utf-8'
+        caching = True
+        pagenums = set()
+
+        converter = TextConverter(manager, output, codec=codec, laparams=LAParams())
+        interpreter = PDFPageInterpreter(manager, converter)
+
+        for page in PDFPage.get_pages(io.BytesIO(pdf),
+                                      pagenums,
+                                      caching=caching,
+                                      check_extractable=True):
+            interpreter.process_page(page)
+
+        converter.close()
+        output.close()
+
+        ret = output.getvalue()
+        return ret
 
     def transform(self):
         self.df[['Source', 'Author', 'Title', 'Misc']] =\
@@ -71,3 +127,10 @@ class ExtractTransformEconSecurityProject(object):
         # ... a straggler
         self.df["Date"].iloc[32] = "Jan, 2005"
         self.df["Title"].iloc[32] = "A Failure to Communicate: What (If Anything) Can we Learn from the Negative Income Tax Experiments?"
+
+        # label content type as one of html, pdf, audio, video
+        self.df["Type"] = "html"
+        self.df.Type[self.df["url"].str.contains("pdf") ] = "pdf"
+        self.df.Type[self.df["url"].str.contains("podcast") ] = "audio"
+        self.df.Type[self.df["url"].str.contains("youtube") ] = "video"
+        self.df.Type[self.df["url"].str.contains("ted.com") ] = "video"
