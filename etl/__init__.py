@@ -2,12 +2,17 @@ from pdfminer.pdfinterp import PDFResourceManager, PDFPageInterpreter
 from pdfminer.converter import HTMLConverter,TextConverter,XMLConverter
 from pdfminer.layout import LAParams
 from pdfminer.pdfpage import PDFPage
+import time
 import io
 import requests
 import pandas as pd
 from lxml.html.clean import Cleaner
 import re
 import os
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class ExtractTransformEconSecurityProject(object):
     def __init__(self,
@@ -30,6 +35,9 @@ class ExtractTransformEconSecurityProject(object):
 
         self.cleaner = Cleaner()
         self.cleaner.javascript = False
+        self.cleaner.style = False
+
+        self.headers = {'User-Agent': 'UBI Fetcher Version 0.1'}
 
     def _swap(self, to_col, from_col, fix_up):
         self.df[to_col].iloc[fix_up] = self.df[from_col].iloc[fix_up]
@@ -37,7 +45,7 @@ class ExtractTransformEconSecurityProject(object):
 
     def _html_to_text(self, url=None, html=None):
         if url and not html:
-            text = requests.get(url).text
+            text = requests.get(url, headers=self.headers).text
 
         ret = " ".join(\
                 re.sub(r'<[^>]*?>', '',\
@@ -46,6 +54,10 @@ class ExtractTransformEconSecurityProject(object):
                 .replace("\n","")
                 .split()
                 )
+
+        # Cleaner seems to fail on some style related tags
+        # note: this does not catch them all, todo: improve
+        ret = re.sub(r'{\s*.+?}', '', ret)
         return ret
 
     def _pdf_to_text(self, url=None, pdf=None):
@@ -56,7 +68,7 @@ class ExtractTransformEconSecurityProject(object):
         """
         ret = None
         if url and not pdf:
-            response = requests.get(url, verify=False)
+            response = requests.get(url, headers=self.headers, verify=False)
             pdf = response.content
 
         manager = PDFResourceManager()
@@ -80,6 +92,37 @@ class ExtractTransformEconSecurityProject(object):
         ret = output.getvalue()
         return ret
 
+    def download_text(self, type="html",
+                      exclude_major_topic=[],
+                      exclude_host=["amazon"]):
+        assert 'url' in self.df, "DataFrame does not have a `url` column to d/l data from! Bad .json read?"
+        assert 'Text' in self.df, "DataFrame does not have a `Text` column to push text data to! Run .transform()"
+        assert 'Type' in self.df, "DataFrame does not have a `Text` column to push text data to! Run .transform()"
+
+        extract = self._html_to_text
+        if "pdf" == type:
+            extract = self._pdf_to_text
+
+        total = sum(self.df.Type == type)
+        count = 0
+        logger.info("About to start extract Text from {} urls".format(type))
+        for idx in self.df.index:
+            if self.df.Type[idx] == type and\
+               not self.df.MajorTopic[idx] in exclude_major_topic and\
+               not any((host in self.df.url[idx] for host in exclude_host)):
+                url = self.df.url[idx]
+                count += 1
+                logger.info("({}/{}) Extracting {} ... ".format(count, total, url))
+                text = extract(url)
+                self.df.Text[idx] = text
+                logger.info("({}/{}) Extracted: \"{}\"".format(count, total, text[:50]))
+
+                time.sleep(1) # be a good netizen when scraping content
+
+            if count > 10:
+                break
+                logging.info("... debug jumping out ...")
+
     def transform(self):
         self.df[['Source', 'Author', 'Title', 'Misc']] =\
             self.df["raw_content"].str.split("//", expand=True)
@@ -95,13 +138,13 @@ class ExtractTransformEconSecurityProject(object):
         self.df["Date"] = author_dates.combine_first(title_dates)
 
         # Set major_topics
-        self.df["Major Topic"] = None
+        self.df["MajorTopic"] = None
 
         lower = 0
         for item in self.topic_list:
             topic = item["topic"]
             upper = item["upper"]
-            self.df["Major Topic"].iloc[lower:upper] = topic
+            self.df["MajorTopic"].iloc[lower:upper] = topic
             lower = upper
 
         # remove dates from non date columns
@@ -124,7 +167,7 @@ class ExtractTransformEconSecurityProject(object):
                   95]
         self._swap("Title", "Source", fix_up)
 
-        # ... a straggler
+       # ... a straggler
         self.df["Date"].iloc[32] = "Jan, 2005"
         self.df["Title"].iloc[32] = "A Failure to Communicate: What (If Anything) Can we Learn from the Negative Income Tax Experiments?"
 
@@ -134,3 +177,6 @@ class ExtractTransformEconSecurityProject(object):
         self.df.Type[self.df["url"].str.contains("podcast") ] = "audio"
         self.df.Type[self.df["url"].str.contains("youtube") ] = "video"
         self.df.Type[self.df["url"].str.contains("ted.com") ] = "video"
+
+        # Place holder for download text to store data into
+        self.df["Text"] = None
