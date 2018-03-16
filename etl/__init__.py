@@ -2,12 +2,14 @@ from pdfminer.pdfinterp import PDFResourceManager, PDFPageInterpreter
 from pdfminer.converter import HTMLConverter,TextConverter,XMLConverter
 from pdfminer.layout import LAParams
 from pdfminer.pdfpage import PDFPage
+from bs4 import BeautifulSoup
 import time
 import io
 import requests
 import pandas as pd
 from lxml.html.clean import Cleaner
 import re
+import unicodedata
 import os
 import logging
 
@@ -45,19 +47,27 @@ class ExtractTransformEconSecurityProject(object):
 
     def _html_to_text(self, url=None, html=None):
         if url and not html:
-            text = requests.get(url, headers=self.headers).text
+            response = requests.get(url, headers=self.headers)
 
-        ret = " ".join(\
-                re.sub(r'<[^>]*?>', '',\
-                    self.cleaner.clean_html(text))\
-                .strip()\
-                .replace("\n","")
-                .split()
-                )
+        ret = self._visible_text(BeautifulSoup(response.content, 'html.parser'))
+        return ret
 
-        # Cleaner seems to fail on some style related tags
-        # note: this does not catch them all, todo: improve
-        ret = re.sub(r'{\s*.+?}', '', ret)
+    def _visible_text(self, soup):
+        """
+        Adopted from https://stackoverflow.com/a/44611484/3662899 `Polar Beer` lol
+        """
+        ret = None
+        INVISIBLE_ELEMS = ('style', 'script', 'head', 'title')
+        RE_SPACES = re.compile(r'\s{3,}')
+
+        """ get visible text from a document """
+        text = ' '.join([
+            s for s in soup.strings
+            if s.parent.name not in INVISIBLE_ELEMS
+        ])
+        # collapse multiple spaces to two spaces, throw out unicode &nbsp, etc
+        two_spaces = RE_SPACES.sub('  ', text)
+        ret = unicodedata.normalize('NFKD', two_spaces)
         return ret
 
     def _pdf_to_text(self, url=None, pdf=None):
@@ -94,10 +104,10 @@ class ExtractTransformEconSecurityProject(object):
 
     def download_text(self, type="html",
                       exclude_major_topic=[],
-                      exclude_host=["amazon"]):
+                      exclude_hosts=["amazon"]):
         assert 'url' in self.df, "DataFrame does not have a `url` column to d/l data from! Bad .json read?"
         assert 'Text' in self.df, "DataFrame does not have a `Text` column to push text data to! Run .transform()"
-        assert 'Type' in self.df, "DataFrame does not have a `Text` column to push text data to! Run .transform()"
+        assert 'Type' in self.df, "DataFrame does not have a `Type` column! Run .transform()"
 
         extract = self._html_to_text
         if "pdf" == type:
@@ -109,7 +119,7 @@ class ExtractTransformEconSecurityProject(object):
         for idx in self.df.index:
             if self.df.Type[idx] == type and\
                not self.df.MajorTopic[idx] in exclude_major_topic and\
-               not any((host in self.df.url[idx] for host in exclude_host)):
+               not any((host in self.df.url[idx] for host in exclude_hosts)):
                 url = self.df.url[idx]
                 count += 1
                 logger.info("({}/{}) Extracting {} ... ".format(count, total, url))
