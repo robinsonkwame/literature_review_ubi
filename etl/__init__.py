@@ -153,7 +153,7 @@ class ExtractTransformEconSecurityProject(object):
         output.close()
         return ret
 
-    def download_text(self, type="html",
+    def download_text(self, content_type="html",
                       exclude_major_topic=[],
                       exclude_hosts=[],
                       selenium_hosts=["wsj.com"],
@@ -163,14 +163,14 @@ class ExtractTransformEconSecurityProject(object):
         assert 'Type' in self.df, "DataFrame does not have a `Type` column! Run .transform()"
 
         extract = self._html_to_text
-        if "pdf" == type:
+        if "pdf" == content_type:
             extract = self._pdf_to_text
 
-        total = sum(self.df.Type == type)
+        total = sum(self.df.Type == content_type)
         count = 0
-        logger.info("About to start extract Text from {} urls".format(type))
+        logger.info("About to start extract Text from {} urls".format(content_type))
         for idx in self.df.index:
-            if self.df.url[idx] and self.df.Type[idx] == type\
+            if self.df.url[idx] and self.df.Type[idx] == content_type\
                and not self.df.MajorTopic[idx] in exclude_major_topic\
                and not any((host in self.df.url[idx] for host in exclude_hosts)):
                 url = self.df.url[idx]
