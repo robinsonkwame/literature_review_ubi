@@ -27,7 +27,10 @@ class ExtractTransformEconSecurityProject(object):
         # some url links are to paywalled academic pdfs, alternatives are given here
         self.pdf_url_redirect = pdf_url_redirect or\
                 "./data/economic_security_project/pdf_redirect_url.json"
-        self.pdf_redirect = pd.read_json(self.pdf_url_redirect)
+        # read in redirect url(s), convert to dict for faster access
+        self.pdf_redirect = pd.read_json(self.pdf_url_redirect)\
+                              .set_index("old_url")\
+                              .to_dict()["new_url"]
 
         self.df = pd.read_json(self.data_file_path)
         self.topic_list = major_topic_list or\
@@ -110,9 +113,8 @@ class ExtractTransformEconSecurityProject(object):
         """
         ret = None
         if url and not pdf:
-            if url in self.pdf_redirect.old_url.values:
-                # um get row with that value
-                url = self.pdf_redirect.new_url[idx]
+            if url in self.pdf_redirect:
+                url = self.pdf_redirect[url]
             response = requests.get(url, headers=self.headers, verify=False, timeout=360)
             pdf = response.content
 
