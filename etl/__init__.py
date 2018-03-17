@@ -27,6 +27,7 @@ class ExtractTransformEconSecurityProject(object):
         # some url links are to paywalled academic pdfs, alternatives are given here
         self.pdf_url_redirect = pdf_url_redirect or\
                 "./data/economic_security_project/pdf_redirect_url.json"
+        self.pdf_redirect = pd.read_json(self.pdf_url_redirect)
 
         self.df = pd.read_json(self.data_file_path)
         self.topic_list = major_topic_list or\
@@ -105,12 +106,13 @@ class ExtractTransformEconSecurityProject(object):
         Convert pdf to text w/o writing to disk
 
         Adopted from https://stackoverflow.com/a/48825461/3662899 `illusionx`
-        Also see: https://stackoverflow.com/a/44458184/3662899
+        Also see: https://stackoverflow.com/a/44458184/3662899 for importance of LAParams
         """
         ret = None
         if url and not pdf:
-            if url in self.pdf_url_redirect:
-                url = self.pdf_url_redirect[url]
+            if url in self.pdf_redirect.old_url.values:
+                # um get row with that value
+                url = self.pdf_redirect.new_url[idx]
             response = requests.get(url, headers=self.headers, verify=False, timeout=360)
             pdf = response.content
 
@@ -131,7 +133,19 @@ class ExtractTransformEconSecurityProject(object):
 
         text = output.getvalue()
         # join together hyphenated words on newlines, replace newlines with space
-        ret = text.replace('-\n', '').replace('\n', ' ')
+        newlines = text.replace('-\n', '').replace('\n', ' ')
+
+        # One off fix ups observed in the result, defintely not sustainable
+        ret = newlines.replace('T here', 'There')\
+                      .replace('consoli date', 'consolidate')
+
+        ret = unicodedata.normalize('NFKD', ret)
+        # Seeing cases where unicode non breaking space \xc2\xa0 is normalized as \xc2
+        ret = ret.replace(u'\x0c2', '').replace(u'\x0c', '')
+
+        # consider special casing removing footer/header text? Will it affect the Argumentation mining at large scale?
+        # I assume not, since we're analyzing larger scale tendencies (e.g., an argument mentioned once, never
+        # refuted by someone else probably isn't as important in large scale discourse)
 
         converter.close()
         output.close()
