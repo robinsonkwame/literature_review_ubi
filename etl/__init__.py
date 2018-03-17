@@ -20,9 +20,13 @@ logger = logging.getLogger(__name__)
 class ExtractTransformEconSecurityProject(object):
     def __init__(self,
                  data_file_path=None,
+                 pdf_url_redirect=None,
                  major_topic_list=None):
         self.data_file_path = data_file_path or\
                 "./data/economic_security_project/reading_list.json"
+        # some url links are to paywalled academic pdfs, alternatives are given here
+        self.pdf_url_redirect = pdf_url_redirect or\
+                "./data/economic_security_project/pdf_redirect_url.json"
 
         self.df = pd.read_json(self.data_file_path)
         self.topic_list = major_topic_list or\
@@ -101,9 +105,12 @@ class ExtractTransformEconSecurityProject(object):
         Convert pdf to text w/o writing to disk
 
         Adopted from https://stackoverflow.com/a/48825461/3662899 `illusionx`
+        Also see: https://stackoverflow.com/a/44458184/3662899
         """
         ret = None
         if url and not pdf:
+            if url in self.pdf_url_redirect:
+                url = self.pdf_url_redirect[url]
             response = requests.get(url, headers=self.headers, verify=False, timeout=360)
             pdf = response.content
 
@@ -112,8 +119,8 @@ class ExtractTransformEconSecurityProject(object):
         codec = 'utf-8'
         caching = True
         pagenums = set()
-
-        converter = TextConverter(manager, output, codec=codec, laparams=LAParams())
+        laparams = LAParams(all_texts=True, detect_vertical=False)
+        converter = TextConverter(manager, output, codec=codec, laparams=laparams)
         interpreter = PDFPageInterpreter(manager, converter)
 
         for page in PDFPage.get_pages(io.BytesIO(pdf),
@@ -122,10 +129,12 @@ class ExtractTransformEconSecurityProject(object):
                                       check_extractable=True):
             interpreter.process_page(page)
 
+        text = output.getvalue()
+        # join together hyphenated words on newlines, replace newlines with space
+        ret = text.replace('-\n', '').replace('\n', ' ')
+
         converter.close()
         output.close()
-
-        ret = output.getvalue()
         return ret
 
     def download_text(self, type="html",
@@ -144,7 +153,7 @@ class ExtractTransformEconSecurityProject(object):
         total = sum(self.df.Type == type)
         count = 0
         logger.info("About to start extract Text from {} urls".format(type))
-        for idx in self.df.index[39:]:
+        for idx in self.df.index:
             if self.df.url[idx] and self.df.Type[idx] == type\
                and not self.df.MajorTopic[idx] in exclude_major_topic\
                and not any((host in self.df.url[idx] for host in exclude_hosts)):
