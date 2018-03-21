@@ -4,6 +4,7 @@ from pdfminer.layout import LAParams
 from pdfminer.pdfpage import PDFPage
 from bs4 import BeautifulSoup
 import time
+import datetime
 import io
 import requests
 from selenium import webdriver
@@ -253,3 +254,12 @@ class ExtractTransformEconSecurityProject(object):
 
         # Place holder for download text to store data into
         self.df["Text"] = None
+
+    # note: untested for now
+    def load(self, load_filepath="./data/",
+             load_filename="download_text_{}.csv"):
+        today = datetime.datetime.now()
+        self.df.to_csv(os.join(load_filepath,
+                               load_filename.format(now.strftime("%Y-%m-%d"))),
+                       sep="\t")
+
